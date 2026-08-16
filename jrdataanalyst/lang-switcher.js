@@ -739,6 +739,87 @@ function addBase(p) {
     }
   }
 
+  /* ------------------------------------------------------------------ */
+  /*  Deployed sidebar repair (GitHub Pages /cv/jrdataanalyst/)         */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * The remix static export's client-side router renders the sidebar
+   * differently after hydration on sub-routes when served from a base
+   * path: the Spanish "group" folder is closed and EMPTIED (data-state
+   * closed, collapsible-content hidden and cleared), and the flat English
+   * headings are re-emitted with a doubled base prefix
+   * ("/cv/jrdataanalyst//..."). Both regressions defeat the html[lang]
+   * rules in myst-theme.css (which hide the English headings on Spanish
+   * pages via single-slash selectors and expect the open folder's items
+   * to be present).
+   *
+   * This routine restores the server-rendered shape, idempotently:
+   *   1. Collapses any "BASE//" occurrence in anchor hrefs back to
+   *      "BASE/" so the CSS selectors match again.
+   *   2. On Spanish pages, re-opens the folder (if present) and re-injects
+   *      the 5 Spanish items into .collapsible-content when it is empty.
+   * Safe to run repeatedly; no-ops once the DOM already matches.
+   */
+  function esSidebarMarkup() {
+    return (
+      '<a title="Alberto Camacho" class="block break-words focus:outline outline-blue-200 outline-2 rounded myst-toc-item p-2 my-1 rounded-lg myst-toc-item-exact bg-blue-300/30" href="/cv/jrdataanalyst/es">Alberto Camacho</a>' +
+      '<a title="Educaci\u00f3n" class="block break-words focus:outline outline-blue-200 outline-2 rounded myst-toc-item p-2 my-1 rounded-lg hover:bg-slate-300/30" href="/cv/jrdataanalyst/es/education">Educaci\u00f3n</a>' +
+      '<a title="Habilidades" class="block break-words focus:outline outline-blue-200 outline-2 rounded myst-toc-item p-2 my-1 rounded-lg hover:bg-slate-300/30" href="/cv/jrdataanalyst/es/skills">Habilidades</a>' +
+      '<a title="Certificaciones" class="block break-words focus:outline outline-blue-200 outline-2 rounded myst-toc-item p-2 my-1 rounded-lg hover:bg-slate-300/30" href="/cv/jrdataanalyst/es/certificaciones">Certificaciones</a>' +
+      '<a title="Contacto" class="block break-words focus:outline outline-blue-200 outline-2 rounded myst-toc-item p-2 my-1 rounded-lg hover:bg-slate-300/30" href="/cv/jrdataanalyst/es/contact">Contacto</a>'
+    );
+  }
+
+  function fixDeployedSidebar() {
+    var doubleBase = BASE + "//";
+
+    // 1) Collapse doubled base prefix in any anchor href (React re-emits
+    //    toc/footer hrefs with it on base-path sub-routes).
+    var bad = document.querySelectorAll("a[href^='" + doubleBase + "']");
+    for (var i = 0; i < bad.length; i++) {
+      var h = bad[i].getAttribute("href");
+      if (h) bad[i].setAttribute("href", h.replace(doubleBase, BASE + "/"));
+    }
+
+    // 2) Spanish page: restore the open folder with its children.
+    if (langFromPath() !== "es") return;
+    var toc = document.querySelector(".myst-toc");
+    if (!toc) return;
+
+    var folder = null;
+    var f, kids = toc.children;
+    for (f = 0; f < kids.length; f++) {
+      if (kids[f].nodeType === 1 && kids[f].tagName === "DIV" && kids[f].getAttribute("data-state") !== null) {
+        folder = kids[f];
+        break;
+      }
+    }
+    if (!folder) return;
+
+    // Re-open the folder (mirrors the server-rendered open state).
+    if (folder.getAttribute("data-state") !== "open") folder.setAttribute("data-state", "open");
+    var header = folder.querySelector("div.myst-toc-item");
+    if (header) {
+      var btn = header.querySelector("button");
+      if (btn) {
+        if (btn.getAttribute("aria-expanded") !== "true") btn.setAttribute("aria-expanded", "true");
+        if (btn.getAttribute("data-state") !== "open") btn.setAttribute("data-state", "open");
+      }
+    }
+
+    var col = folder.querySelector(".collapsible-content");
+    if (!col) return;
+
+    if (col.getAttribute("data-state") !== "open") col.setAttribute("data-state", "open");
+    if (col.hasAttribute("hidden")) col.removeAttribute("hidden");
+
+    // Only re-inject when the app has left the container empty.
+    if (col.querySelector && col.querySelector("a[href]")) return;
+
+    col.innerHTML = esSidebarMarkup();
+  }
+
   function applyOnce() {
     var currentLang = langFromPath();
     document.documentElement.lang = currentLang === "es" ? "es" : "en";
@@ -746,6 +827,8 @@ function addBase(p) {
     ensureButton();
     // Initial normalize: sidebar is already rendered at this point.
     try { normalizeFooterNow(); } catch (_) {}
+    // Repair whatever the hydration pass left in the toc (see fixDeployedSidebar).
+    try { fixDeployedSidebar(); } catch (_) {}
 
     // Re-apply lang + PDF swap on client-side route changes (URL changes
     // without a full reload). The button itself persists in the root layout.
@@ -787,6 +870,10 @@ function addBase(p) {
     // Fallback: pathname polling + scheduled normalize (covers cases where
     // the footer swap doesn't trigger our observer or happens before it attaches).
     setInterval(function () {
+      // Keep the toc in the server-rendered shape (en/ES pages alike);
+      // a no-op when nothing needs repairing.
+      try { fixDeployedSidebar(); } catch (_) {}
+
       var p = getPathname();
       if (p !== lastPath) {
         lastPath = p;

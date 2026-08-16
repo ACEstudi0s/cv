@@ -168,26 +168,32 @@ function addBase(p) {
    * so the joined path never collapses ("/es" + "/contact", not "/escontact").
    */
   function twinPath(clean, targetLang) {
+    // comparable() strips the trailing slash before this point, but the
+    // project's known routes all carry one; re-add it so the slug cases
+    // below ("education/", "certificaciones/", ...) still match, and the
+    // joined fallbacks keep a slash between the base and the slug.
+    var raw = clean;
+    if (raw.length > 1 && raw.charAt(raw.length - 1) !== "/") raw = raw + "/";
     if (targetLang === "es") {
       if (clean === "/") return "/es";
-      if (clean.indexOf("/pages/") === 0) {
-        var slug = clean.slice(6); // remove "/pages/"
+      if (raw.indexOf("/pages/") === 0) {
+        var slug = raw.slice(7); // remove the full "/pages/" prefix (7 chars)
         if (slug === "certifications/") return "/es/certificaciones/";
         if (slug === "education/") return "/es/education/";
         if (slug === "skills/") return "/es/skills/";
         if (slug === "contact/") return "/es/contact/";
-        return "/es" + slug; // fallback
+        return "/es" + (slug.charAt(0) === "/" ? slug : "/" + slug); // fallback
       }
       return "/es";
     }
     if (clean === "/es") return "/";
-    if (clean.indexOf("/es/") === 0) {
-      var slug = clean.slice(4); // remove "/es/"
+    if (raw.indexOf("/es/") === 0) {
+      var slug = raw.slice(4); // remove the "/es/" prefix (4 chars)
       if (slug === "certificaciones/") return "/pages/certifications/";
       if (slug === "education/") return "/pages/education/";
       if (slug === "skills/") return "/pages/skills/";
       if (slug === "contact/") return "/pages/contact/";
-      return "/pages" + slug; // fallback
+      return "/pages" + (slug.charAt(0) === "/" ? slug : "/" + slug); // fallback
     }
     return "/";
   }
